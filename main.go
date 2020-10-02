@@ -187,11 +187,16 @@ func processInstances(
 
 		fmt.Println(`querying for cw metrics:`, ec2Instance.Id)
 
-		for cycle := 1; cycle <= 1; cycle++ {
-			start := aws.Time(time.Now().Add(-*metricInterval))
-			end := aws.Time(time.Now())
+		for cycle := 0; cycle < 2; cycle++ {
+			startWindow := time.Duration(-(48 * (cycle + 1)))
+			endWindow := time.Duration(-(48 * cycle))
+			start := aws.Time(time.Now().Add((startWindow * time.Hour)))
+			end := aws.Time(time.Now().Add(endWindow * time.Hour))
+			fmt.Println(start)
+			fmt.Println(end)
 			instanceMetrics, err := cw.GetMetricStatistics(
 				newCloudWatchQuery(cwMetric, cwUnit, ec2Instance.Id, start, end))
+			fmt.Println(instanceMetrics)
 			if err != nil {
 				return nil, err
 			}
