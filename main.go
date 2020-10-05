@@ -26,7 +26,8 @@ var (
 	cloudwatchPeroid = flag.Int64(`cloudwatchPeroid`, 120, ``)
 	cloudwatchAgg    = flag.String(`cloudwatchAgg`, `average`, `metric value aggregator`)
 	metricThreshold  = flag.Float64(`threshold`, 30.0, `metric segmentation value`)
-	metricInterval   = flag.Duration(`interval`, 48*time.Hour, `duration of time to subtract from current time`)
+	metricInterval   = flag.Duration(`interval`, 24*time.Hour, `duration of time to subtract from current time`)
+	numberDays       = flag.Int(`days`, 7, `Number of days of metrics`)
 )
 
 type Ec2Instance struct {
@@ -176,10 +177,7 @@ func newCloudWatchQuery(metric, unit string, instanceId string, start *time.Time
 	return metrics
 }
 
-func processInstances(
-	cw *cloudwatch.CloudWatch,
-	cwMetric, cwUnit string,
-	threshold float64,
+func processInstances(cw *cloudwatch.CloudWatch, cwMetric, cwUnit string, threshold float64,
 	instances []*ec2.Instance) ([]Ec2Instance, error) {
 	var ec2Instances []Ec2Instance
 	for _, instance := range instances {
@@ -187,25 +185,31 @@ func processInstances(
 
 		fmt.Println(`querying for cw metrics:`, ec2Instance.Id)
 
-		for cycle := 0; cycle < 2; cycle++ {
-			startWindow := time.Duration(-(48 * (cycle + 1)))
-			endWindow := time.Duration(-(48 * cycle))
+		for cycle := 0; cycle < *numberDays; cycle++ {
+			startWindow := time.Duration(-(24 * (cycle + 1)))
+			endWindow := time.Duration(-(24 * cycle))
 			start := aws.Time(time.Now().Add((startWindow * time.Hour)))
 			end := aws.Time(time.Now().Add(endWindow * time.Hour))
-			fmt.Println(start)
-			fmt.Println(end)
 			instanceMetrics, err := cw.GetMetricStatistics(
 				newCloudWatchQuery(cwMetric, cwUnit, ec2Instance.Id, start, end))
-			fmt.Println(instanceMetrics)
 			if err != nil {
 				return nil, err
 			}
-			ec2Instance.CwSummaries[cwMetric] =
-				summarizeCloudWatchSeries(instanceMetrics, threshold)
+			// If the value is permmited
+			var newMetrics = summarizeCloudWatchSeries(instanceMetrics, threshold)
+			if val, ok := ec2Instance.CwSummaries[cwMetric]; ok {
+				val.Mean = (val.Mean + newMetrics.Mean) / 2.0
+				val.Q95 = (val.Q95 + newMetrics.Q95) / 2.0
+				val.StdDev = (val.StdDev + newMetrics.StdDev) / 2.0
+				val.Sum = (val.Sum + newMetrics.Sum) / 2.0
+				val.NumDatapoints = val.NumDatapoints + newMetrics.NumDatapoints
+				val.ThresholdDatapoints = val.ThresholdDatapoints + newMetrics.NumDatapoints
+				ec2Instance.CwSummaries[cwMetric] = val
+			} else {
+				ec2Instance.CwSummaries[cwMetric] = newMetrics
+			}
 		}
-
 		ec2Instances = append(ec2Instances, ec2Instance)
-
 	}
 	return ec2Instances, nil
 }
@@ -263,7 +267,7 @@ func renderGroupedAsciiSummary(groupField string, summaries map[string]GroupedCw
 	}
 
 	floatToString := func(n float64) string {
-		return strconv.FormatFloat(n, 'f', 0, 64)
+		return strconv.FormatFloat(n, 'f', 4, 64)
 	}
 
 	var groups []string
@@ -299,8 +303,13 @@ func renderGroupedAsciiSummary(groupField string, summaries map[string]GroupedCw
 		}
 	}
 
+	startWindow := time.Duration(-(24 * (*numberDays)))
+
+	start := aws.Time(time.Now().Add((startWindow * time.Hour))).UTC().Format("2006-01-02")
+	end := aws.Time(time.Now()).UTC().Format("2006-01-02")
+
 	fmt.Println(
-		time.Now().UTC(),
+		fmt.Sprintf("Collected from %v to %v", start, end),
 		` -- `,
 		strings.Join([]string{
 			*awsRegion,
