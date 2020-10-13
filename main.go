@@ -203,17 +203,19 @@ func processInstances(cw *cloudwatch.CloudWatch, cwMetric, cwUnit string, thresh
 				val.StdDev = (val.StdDev + newMetrics.StdDev)
 				val.Sum = (val.Sum + newMetrics.Sum)
 				val.NumDatapoints = val.NumDatapoints + newMetrics.NumDatapoints
-				val.ThresholdDatapoints = val.ThresholdDatapoints + newMetrics.NumDatapoints
+				val.ThresholdDatapoints = val.ThresholdDatapoints + newMetrics.ThresholdDatapoints
 				ec2Instance.CwSummaries[cwMetric] = val
 			} else {
 				ec2Instance.CwSummaries[cwMetric] = newMetrics
 			}
 		}
 		if val, ok := ec2Instance.CwSummaries[cwMetric]; ok {
-			val.Mean /= 2.0
-			val.Q95 /= 2.0
-			val.StdDev /= 2.0
-			val.Sum /= 2.0
+			numDays := float64(*numberDays)
+			val.Mean /= numDays
+			val.Q95 /= numDays
+			val.StdDev /= numDays
+			val.Sum /= numDays
+			val.ThresholdDatapoints /= *numberDays
 		}
 
 		ec2Instances = append(ec2Instances, ec2Instance)
