@@ -198,10 +198,10 @@ func processInstances(cw *cloudwatch.CloudWatch, cwMetric, cwUnit string, thresh
 			// If the value is permmited
 			var newMetrics = summarizeCloudWatchSeries(instanceMetrics, threshold)
 			if val, ok := ec2Instance.CwSummaries[cwMetric]; ok {
-				val.Mean = (val.Mean + newMetrics.Mean) / 2.0
-				val.Q95 = (val.Q95 + newMetrics.Q95) / 2.0
-				val.StdDev = (val.StdDev + newMetrics.StdDev) / 2.0
-				val.Sum = (val.Sum + newMetrics.Sum) / 2.0
+				val.Mean = (val.Mean + newMetrics.Mean)
+				val.Q95 = (val.Q95 + newMetrics.Q95)
+				val.StdDev = (val.StdDev + newMetrics.StdDev)
+				val.Sum = (val.Sum + newMetrics.Sum)
 				val.NumDatapoints = val.NumDatapoints + newMetrics.NumDatapoints
 				val.ThresholdDatapoints = val.ThresholdDatapoints + newMetrics.NumDatapoints
 				ec2Instance.CwSummaries[cwMetric] = val
@@ -209,6 +209,13 @@ func processInstances(cw *cloudwatch.CloudWatch, cwMetric, cwUnit string, thresh
 				ec2Instance.CwSummaries[cwMetric] = newMetrics
 			}
 		}
+		if val, ok := ec2Instance.CwSummaries[cwMetric]; ok {
+			val.Mean /= 2.0
+			val.Q95 /= 2.0
+			val.StdDev /= 2.0
+			val.Sum /= 2.0
+		}
+
 		ec2Instances = append(ec2Instances, ec2Instance)
 	}
 	return ec2Instances, nil
